@@ -2,6 +2,8 @@
 
 A **semantic layer** built on real household energy data, with an AI chat agent on top so anyone can query it in plain English and get visualizations.
 
+![demo](demo.gif)
+
 ## What is a Semantic Layer?
 
 Raw data has cryptic column names (`Sub_metering_1`, `Global_active_power`) and formulas buried in documentation. A semantic layer sits on top and translates them into business-friendly terms:
