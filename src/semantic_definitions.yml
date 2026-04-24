@@ -1,0 +1,141 @@
+# semantic_definitions.yml
+# ========================
+# This file documents every metric and dimension in the semantic layer.
+# It's the "contract" between data engineers and analysts.
+# In production, a tool like Cube or dbt MetricFlow would read this directly.
+# Here it serves as human-readable documentation.
+
+tariff:
+  eur_per_kwh: 0.18
+  source: "Approximate French residential tariff (EDF Bleu)"
+
+entities:
+  reading:
+    description: "One minute-level power measurement from the household"
+    source_table: stg_readings
+    grain: "1 minute"
+    primary_key: reading_ts
+
+dimensions:
+  date_day:
+    type: date
+    description: "Calendar date of the reading"
+
+  year:
+    type: integer
+    description: "Calendar year"
+
+  month_name:
+    type: string
+    description: "Full month name (January, February, ...)"
+
+  day_of_week_name:
+    type: string
+    description: "Full day name (Monday, Tuesday, ...)"
+
+  hour_of_day:
+    type: integer
+    description: "Hour of day 0-23"
+
+  peak_period:
+    type: string
+    values: ["Peak", "Off-Peak"]
+    definition: "Peak = 06:00–21:59, Off-Peak = 22:00–05:59"
+    business_owner: "Facilities / Finance"
+
+  season:
+    type: string
+    values: ["Winter", "Spring", "Summer", "Autumn"]
+    definition: "Northern Hemisphere meteorological seasons (DJF, MAM, JJA, SON)"
+
+  weekday_type:
+    type: string
+    values: ["Weekday", "Weekend"]
+    definition: "Saturday & Sunday = Weekend, else Weekday"
+
+metrics:
+  kitchen_consumption:
+    display_name: "Kitchen Consumption"
+    unit: "Wh (hourly) / kWh (daily+)"
+    formula: "SUM(sub_metering_1_wh)"
+    source_column: Sub_metering_1
+    description: "Dishwasher, oven, microwave. Gas hot plates excluded."
+
+  laundry_consumption:
+    display_name: "Laundry Consumption"
+    unit: "Wh / kWh"
+    formula: "SUM(sub_metering_2_wh)"
+    source_column: Sub_metering_2
+    description: "Washing machine, tumble dryer, refrigerator, light."
+
+  climate_consumption:
+    display_name: "Climate Consumption"
+    unit: "Wh / kWh"
+    formula: "SUM(sub_metering_3_wh)"
+    source_column: Sub_metering_3
+    description: "Electric water heater and air conditioner."
+
+  unmetered_consumption:
+    display_name: "Unmetered Consumption"
+    unit: "Wh / kWh"
+    formula: "global_active_power_kw * 1000/60 - sub1 - sub2 - sub3"
+    description: >
+      Active energy consumed by equipment NOT covered by the three
+      submeters. Clamped to zero (GREATEST(..., 0)) to handle
+      measurement noise.
+
+  total_consumption:
+    display_name: "Total Consumption"
+    unit: "Wh / kWh"
+    formula: "kitchen + laundry + climate + unmetered"
+    description: "Sum of all four consumption zones."
+    is_additive: true
+
+  estimated_cost:
+    display_name: "Estimated Cost"
+    unit: "EUR"
+    formula: "total_consumption_kwh * tariff_eur_per_kwh"
+    depends_on: [total_consumption, tariff]
+    description: >
+      Rough cost estimate using a flat tariff. Does not account for
+      time-of-use pricing, taxes, or standing charges.
+
+  peak_consumption:
+    display_name: "Peak Consumption"
+    unit: "kWh"
+    formula: "SUM(total WHERE hour BETWEEN 6 AND 21)"
+    depends_on: [total_consumption, peak_period]
+
+  offpeak_consumption:
+    display_name: "Off-Peak Consumption"
+    unit: "kWh"
+    formula: "SUM(total WHERE hour NOT BETWEEN 6 AND 21)"
+    depends_on: [total_consumption, peak_period]
+
+  avg_voltage:
+    display_name: "Average Voltage"
+    unit: "Volts"
+    formula: "AVG(voltage_v)"
+    description: "Nominal 230V in France. Values outside 220-240V flag quality issues."
+
+  max_current:
+    display_name: "Max Current"
+    unit: "Amperes"
+    formula: "MAX(current_intensity_a)"
+    description: "Peak current draw in the period. Useful for breaker sizing."
+
+views:
+  metric_hourly:
+    grain: "1 hour"
+    description: "Consumption, cost, and power quality per hour"
+    metrics: [kitchen, laundry, climate, unmetered, total, cost, voltage, current]
+
+  metric_daily:
+    grain: "1 day"
+    description: "Daily roll-up with peak/off-peak split"
+    metrics: [kitchen, laundry, climate, unmetered, total, cost, peak, offpeak, voltage, current]
+
+  metric_monthly:
+    grain: "1 month"
+    description: "Monthly roll-up for trend analysis"
+    metrics: [kitchen, laundry, climate, unmetered, total, cost, peak, offpeak, voltage]

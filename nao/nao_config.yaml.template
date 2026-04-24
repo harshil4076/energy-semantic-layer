@@ -1,0 +1,20 @@
+project_name: energy-semantic-layer
+databases:
+  - name: energy_semantic
+    templates:
+      - columns
+      - preview
+    profiling:
+      refresh_policy: "once"
+    include: []
+    exclude:
+      - stg_readings   # raw staging table — point users to metric views instead
+    type: duckdb
+    path: ../data/energy_semantic.duckdb
+repos: []
+notion: null
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  api_key: ${ANTHROPIC_API_KEY}
+slack: null
