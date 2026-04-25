@@ -11,6 +11,17 @@ databases:
       - stg_readings   # raw staging table — point users to metric views instead
     type: duckdb
     path: ../data/energy_semantic.duckdb
+  - name: buildings_semantic
+    templates:
+      - columns
+      - preview
+    profiling:
+      refresh_policy: "once"
+    include: []
+    exclude:
+      - stg_meter_readings   # raw staging table — point users to metric views instead
+    type: duckdb
+    path: ../data/buildings_semantic.duckdb
 repos: []
 notion: null
 llm:

@@ -8,6 +8,7 @@ data/*.txt
 data/*.csv
 data/*.zip
 data/*.duckdb
+data/buildings/*.csv
 
 # Python
 __pycache__/

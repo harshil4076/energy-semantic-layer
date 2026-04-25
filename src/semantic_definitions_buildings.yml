@@ -1,0 +1,97 @@
+version: "1"
+source: Building Data Genome Project 2 (BDG2) — Kaggle
+
+constants:
+  business_hours_start: 8          # 08:00 local time
+  business_hours_end: 18           # 17:59 local time
+  annualization_factor: 8760       # hours/year — multiply hourly EUI by this to annualize
+
+tables:
+
+  stg_meter_readings:
+    description: >
+      Long-format staging table. Each row is one hourly reading for one building
+      and one meter type. Null or negative readings are excluded. Source: 8 wide-format
+      *_cleaned.csv files from BDG2, unpivoted so each building column becomes a row.
+    grain: building × meter_type × hour
+    columns:
+      ts:           { type: TIMESTAMP, description: "UTC-ish timestamp (top of hour)" }
+      building_id:  { type: VARCHAR,   description: "Unique building identifier, e.g. Panther_lodging_Dean" }
+      meter_type:   { type: VARCHAR,   description: "One of: electricity, gas, hotwater, chilledwater, steam, water, irrigation, solar" }
+      kwh:          { type: DOUBLE,    description: "Energy consumption in kWh for this hour" }
+
+  dim_building:
+    description: >
+      One row per building. Key reference for joining consumption data with
+      building characteristics (size, type, site, location).
+    grain: building_id
+    columns:
+      building_id:          { type: VARCHAR,  description: "Unique building ID (matches stg_meter_readings)" }
+      site_id:              { type: VARCHAR,  description: "Campus/portfolio the building belongs to" }
+      primaryspaceusage:    { type: VARCHAR,  description: "Space type: Office, Lodging/residential, Education, etc." }
+      sub_primaryspaceusage:{ type: VARCHAR,  description: "Sub-type e.g. 'Residence Hall', 'Laboratory'" }
+      sqm:                  { type: DOUBLE,   description: "Floor area in square meters" }
+      sqft:                 { type: DOUBLE,   description: "Floor area in square feet (used for EUI calculation)" }
+      lat:                  { type: DOUBLE,   description: "Latitude" }
+      lng:                  { type: DOUBLE,   description: "Longitude" }
+      timezone:             { type: VARCHAR,  description: "IANA timezone, e.g. US/Eastern" }
+      industry:             { type: VARCHAR,  description: "Sector: Education, Commercial, etc." }
+      yearbuilt:            { type: INTEGER,  description: "Year of construction" }
+      numberoffloors:       { type: INTEGER,  description: "Number of floors" }
+      has_electricity:      { type: VARCHAR,  description: "Non-null if building has electricity meter" }
+      has_gas:              { type: VARCHAR,  description: "Non-null if building has gas meter" }
+      has_hotwater:         { type: VARCHAR,  description: "Non-null if building has hot water meter" }
+      has_chilledwater:     { type: VARCHAR,  description: "Non-null if building has chilled water meter" }
+      has_steam:            { type: VARCHAR,  description: "Non-null if building has steam meter" }
+      has_solar:            { type: VARCHAR,  description: "Non-null if building has solar generation meter" }
+
+  dim_time:
+    description: >
+      One row per unique timestamp in stg_meter_readings. Adds business-friendly
+      time attributes for slicing by season, weekday type, and business hours.
+    grain: ts (hourly)
+    columns:
+      ts:               { type: TIMESTAMP, description: "The timestamp (matches stg_meter_readings.ts)" }
+      date:             { type: DATE,      description: "Calendar date" }
+      year:             { type: INTEGER,   description: "Calendar year" }
+      month:            { type: INTEGER,   description: "Month number (1–12)" }
+      day:              { type: INTEGER,   description: "Day of month" }
+      hour:             { type: INTEGER,   description: "Hour of day (0–23)" }
+      weekday_num:      { type: INTEGER,   description: "Day of week (0=Sunday, 6=Saturday)" }
+      weekday_name:     { type: VARCHAR,   description: "Monday … Sunday" }
+      weekday_type:     { type: VARCHAR,   description: "Weekday or Weekend" }
+      season:           { type: VARCHAR,   description: "Winter (DJF), Spring (MAM), Summer (JJA), Autumn (SON)" }
+      is_business_hours:{ type: BOOLEAN,   description: "True for 08:00–17:59 on weekdays" }
+
+  metric_building_hourly:
+    description: >
+      Hourly consumption per building and meter type, enriched with building size
+      and time attributes. Primary view for load profile and anomaly analysis.
+      EUI (Energy Use Intensity) = kwh / sqft for the hour; multiply by 8760 to annualize.
+    grain: building_id × meter_type × hour
+    key_metrics:
+      kwh:            "Raw consumption in kWh"
+      kwh_per_sqft:   "EUI proxy: kWh / building sqft (annualize × 8760)"
+
+  metric_building_daily:
+    description: >
+      Daily rollup per building and meter type. Use for day-level comparisons,
+      weekday vs weekend patterns, and seasonal breakdowns.
+    grain: building_id × meter_type × day
+    key_metrics:
+      total_kwh:          "Total consumption for the day"
+      avg_hourly_kwh:     "Average hourly load"
+      peak_hourly_kwh:    "Maximum single-hour load"
+      daily_kwh_per_sqft: "Daily EUI proxy (annualize × 365)"
+      hours_with_data:    "Count of hours with valid readings (max 24)"
+
+  metric_site_monthly:
+    description: >
+      Monthly rollup per site and meter type. Use for portfolio benchmarking,
+      year-over-year site comparisons, and cross-site EUI ranking.
+    grain: site_id × meter_type × year-month
+    key_metrics:
+      total_kwh:            "Total site consumption for the month"
+      avg_building_kwh:     "Average per-building consumption for the month"
+      building_count:       "Number of buildings contributing data"
+      monthly_kwh_per_sqft: "Site EUI proxy for the month"

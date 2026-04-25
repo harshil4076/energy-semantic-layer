@@ -14,14 +14,16 @@ Raw data has cryptic column names (`Sub_metering_1`, `Global_active_power`) and 
 
 Change a definition in one place and every query, dashboard, and report updates automatically.
 
-## Dataset
+## Datasets
+
+### Dataset 1 — UCI Household Electric Power Consumption
 
 **UCI Individual Household Electric Power Consumption**
 - ~2 million minute-level readings from a household near Paris
 - December 2006 – November 2010 (47 months)
 - 3 submetering channels + overall power, voltage, and current
 
-### Download instructions
+**Download instructions:**
 
 1. Go to https://www.kaggle.com/datasets/uciml/electric-power-consumption-data-set
 2. Sign in to Kaggle and click **Download**
@@ -34,7 +36,31 @@ energy-semantic-layer/
     └── household_power_consumption.txt   ← file goes here
 ```
 
-The `data/` folder is gitignored — the raw file is never committed.
+### Dataset 2 — Building Data Genome Project 2
+
+**Building Data Genome Project 2 (BDG2)**
+- 1,636 commercial and institutional buildings across multiple sites/campuses
+- Hourly meter readings from 2016–2017 (17,544 rows per meter type)
+- 8 meter types: electricity, gas, hot water, chilled water, steam, water, irrigation, solar
+- Building metadata: floor area (sqft/sqm), space type, timezone, year built, etc.
+
+**Download instructions:**
+
+1. Go to https://www.kaggle.com/datasets/claytonmiller/buildingdatagenomeproject2
+2. Sign in to Kaggle and click **Download**
+3. Unzip the downloaded archive
+4. Place all CSV files inside the `data/buildings/` folder:
+
+```
+energy-semantic-layer/
+└── data/
+    └── buildings/
+        ├── electricity_cleaned.csv   ← and the other 17 CSV files
+        ├── metadata.csv
+        └── ...
+```
+
+The `data/` folder is gitignored — raw files are never committed.
 
 ---
 
@@ -48,9 +74,9 @@ cd energy-semantic-layer
 pip install -r requirements.txt
 ```
 
-### 2. Build the semantic layer
+### 2. Build the semantic layers
 
-This loads the raw CSV into DuckDB and creates all the metric views:
+**Household layer** (requires dataset 1):
 
 ```bash
 python src/setup_semantic_layer.py
@@ -69,7 +95,27 @@ Expected output:
   ✓ metric_monthly (monthly aggregates)
 ```
 
-The database is saved at `data/energy_semantic.duckdb`.
+Database saved at `data/energy_semantic.duckdb`.
+
+**Buildings layer** (requires dataset 2, takes ~2 minutes):
+
+```bash
+python src/setup_buildings_layer.py
+```
+
+Expected output:
+```
+── Building buildings semantic layer in buildings_semantic.duckdb ──
+
+  ✓ stg_meter_readings  →  48,879,982 rows loaded
+  ✓ dim_building        →  1,636 buildings
+  ✓ dim_time
+  ✓ metric_building_hourly
+  ✓ metric_building_daily
+  ✓ metric_site_monthly
+```
+
+Database saved at `data/buildings_semantic.duckdb`.
 
 ### 3. Run example queries (optional)
 
@@ -134,22 +180,31 @@ Open **http://localhost:5005** in your browser.
 
 ### Example questions to ask
 
-**Cost and consumption**
+The agent has access to both datasets and will choose the right one based on context.
+
+**Household — cost and consumption**
 - "How much did electricity cost each month in 2007?"
 - "Which consumption zone (kitchen, laundry, climate) costs the most over the year?"
 - "What were the top 10 most expensive days on record?"
 
-**Patterns and comparisons**
+**Household — patterns and comparisons**
 - "Show me the average hourly load profile — which hour uses the most energy?"
 - "Do we use more energy on weekends or weekdays?"
 - "How does winter consumption compare to summer?"
 
-**Trends**
-- "Show year-over-year total consumption and cost"
-- "Which month had the highest climate (water heater/AC) usage?"
+**Buildings — EUI and benchmarking**
+- "Which buildings have the highest electricity EUI (kWh per sqft)?"
+- "Compare electricity consumption across sites as a bar chart"
+- "Which site uses the most gas each month?"
 
-**Anomalies**
-- "Were there any days with voltage outside the normal 220–240V range?"
+**Buildings — meter types and patterns**
+- "What's the split between electricity, gas, and steam across all buildings?"
+- "Show the average hourly load profile for office buildings"
+- "Do buildings use more electricity on weekdays or weekends?"
+
+**Buildings — trends**
+- "Show monthly electricity consumption by site for 2016 and 2017"
+- "Which building type uses the most chilled water in summer?"
 
 Add "as a line chart" or "as a stacked bar chart" to any question to get a visualization.
 
@@ -207,23 +262,26 @@ The human-readable metric contract is also documented in [`src/semantic_definiti
 
 ```
 energy-semantic-layer/
-├── data/                          ← gitignored; put raw .txt file here
+├── data/                              ← gitignored; put raw data files here
+│   └── buildings/                     ← put BDG2 CSVs here
 ├── src/
-│   ├── setup_semantic_layer.py    ← builds DuckDB + all views (edit business rules here)
-│   ├── run_sample_queries.py      ← demo queries
-│   └── semantic_definitions.yml  ← human-readable metric contract
+│   ├── setup_semantic_layer.py        ← builds household DuckDB + views
+│   ├── setup_buildings_layer.py       ← builds buildings DuckDB + views
+│   ├── run_sample_queries.py          ← demo queries (household)
+│   ├── semantic_definitions.yml       ← household metric contract
+│   └── semantic_definitions_buildings.yml  ← buildings metric contract
 ├── tests/
-│   └── test_semantic_layer.py    ← 25 pytest tests, no data file needed
+│   └── test_semantic_layer.py         ← 25 pytest tests, no data file needed
 ├── nao/
-│   ├── nao_config.yaml.template  ← committed config template (no secrets)
-│   ├── nao_config.yaml           ← gitignored; generated by start.sh
-│   ├── .env                      ← gitignored; add your ANTHROPIC_API_KEY here
-│   ├── start.sh                  ← start the chat server
-│   ├── RULES.md                  ← agent business rules
-│   ├── agent/skills/             ← pre-built SQL skills for common questions
-│   └── databases/                ← table context files (auto-generated by nao sync)
+│   ├── nao_config.yaml.template       ← committed config template (no secrets)
+│   ├── nao_config.yaml                ← gitignored; generated by start.sh
+│   ├── .env                           ← gitignored; add your ANTHROPIC_API_KEY here
+│   ├── start.sh                       ← start the chat server
+│   ├── RULES.md                       ← agent business rules for both datasets
+│   ├── agent/skills/                  ← pre-built SQL skills for common questions
+│   └── databases/                     ← table context files (auto-generated by nao sync)
 ├── scripts/
-│   └── download_data.sh          ← optional: downloads via Kaggle CLI
+│   └── download_data.sh               ← optional: downloads via Kaggle CLI
 └── requirements.txt
 ```
 
@@ -232,9 +290,11 @@ energy-semantic-layer/
 1. **Change the tariff** — edit `TARIFF_EUR_PER_KWH` in `setup_semantic_layer.py`, re-run setup, ask nao "what's the monthly cost now?"
 2. **Add a weekly metric view** — create `metric_weekly` following the daily pattern, run `nao sync` to pick it up
 3. **Add a high-usage alert flag** to `metric_daily` (e.g. days > 30 kWh) and add it to `nao/RULES.md`
-4. **Connect Metabase or Superset** directly to `data/energy_semantic.duckdb`
+4. **Connect Metabase or Superset** directly to `data/energy_semantic.duckdb` or `data/buildings_semantic.duckdb`
+5. **Cross-dataset question** — ask nao to compare household consumption patterns with commercial building load profiles
 
 ## License
 
-Dataset: CC BY 4.0 (Hébrail & Bérard, UCI ML Repository)
+Household dataset: CC BY 4.0 (Hébrail & Bérard, UCI ML Repository)
+Buildings dataset: CC BY 4.0 (Miller et al., Building Data Genome Project 2)
 Code: MIT
