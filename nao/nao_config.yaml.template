@@ -22,7 +22,9 @@ databases:
       - stg_meter_readings   # raw staging table — point users to metric views instead
     type: duckdb
     path: ../data/buildings_semantic.duckdb
-repos: []
+repos:
+  - name: portfolio-context
+    local_path: ./context
 notion: null
 llm:
   provider: anthropic

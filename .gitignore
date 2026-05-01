@@ -9,6 +9,7 @@ data/*.csv
 data/*.zip
 data/*.duckdb
 data/buildings/*.csv
+data/context/*.csv
 
 # Python
 __pycache__/
